@@ -1,237 +1,276 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import { Search, Star, GitFork, Eye, Calendar, Bookmark, BookmarkCheck, TrendingUp, Activity } from 'lucide-react';
-import RepositoryCard from '@/components/RepositoryCard';
-import StatsChart from '@/components/StatsChart';
-import FilterPanel from '@/components/FilterPanel';
-import BookmarkedRepos from '@/components/BookmarkedRepos';
-
-interface Repository {
-  id: number;
-  name: string;
-  full_name: string;
-  description: string;
-  stargazers_count: number;
-  forks_count: number;
-  watchers_count: number;
-  language: string;
-  updated_at: string;
-  html_url: string;
-  owner: {
-    login: string;
-    avatar_url: string;
-  };
-  topics: string[];
-}
-
+import { useState, useEffect } from "react";
+import { Search, Star, GitFork, Eye, Calendar, ExternalLink, Bookmark, BookmarkCheck, Filter, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { motion, AnimatePresence } from "framer-motion";
+import { RepoCard } from "@/components/RepoCard";
+import { SearchFilters } from "@/components/SearchFilters";
+import { AnalyticsChart } from "@/components/AnalyticsChart";
+import { BookmarksPanel } from "@/components/BookmarksPanel";
+import { useGitHubAPI } from "@/hooks/useGitHubAPI";
+import { useBookmarks } from "@/hooks/useBookmarks";
 const Index = () => {
-  const [repositories, setRepositories] = useState<Repository[]>([]);
-  const [filteredRepos, setFilteredRepos] = useState<Repository[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('stars');
-  const [languageFilter, setLanguageFilter] = useState('all');
-  const [bookmarkedRepos, setBookmarkedRepos] = useState<Repository[]>([]);
-  const [activeTab, setActiveTab] = useState('explore');
-  const { toast } = useToast();
+  const [searchQuery, setSearchQuery] = useState("react");
+  const [selectedLanguage, setSelectedLanguage] = useState("all");
+  const [sortBy, setSortBy] = useState("stars");
+  const [showFilters, setShowFilters] = useState(false);
+
+  const { repositories, loading, searchRepositories, trending } = useGitHubAPI();
+  const { bookmarks, addBookmark, removeBookmark, isBookmarked } = useBookmarks();
 
   useEffect(() => {
-    fetchTrendingRepos();
-    loadBookmarkedRepos();
-  }, []);
+    searchRepositories(searchQuery, selectedLanguage, sortBy);
+  }, [searchQuery, selectedLanguage, sortBy]);
 
-  useEffect(() => {
-    filterAndSortRepos();
-  }, [repositories, searchTerm, sortBy, languageFilter]);
-
-  const fetchTrendingRepos = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(
-        'https://api.github.com/search/repositories?q=stars:>1000&sort=stars&order=desc&per_page=30'
-      );
-      const data = await response.json();
-      setRepositories(data.items || []);
-    } catch (error) {
-      console.error('Error fetching repositories:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch repositories. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    searchRepositories(searchQuery, selectedLanguage, sortBy);
   };
 
-  const filterAndSortRepos = () => {
-    let filtered = repositories;
-
-    if (searchTerm) {
-      filtered = filtered.filter(repo => 
-        repo.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        repo.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        repo.owner.login.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (languageFilter !== 'all') {
-      filtered = filtered.filter(repo => repo.language === languageFilter);
-    }
-
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'stars':
-          return b.stargazers_count - a.stargazers_count;
-        case 'forks':
-          return b.forks_count - a.forks_count;
-        case 'updated':
-          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-        default:
-          return 0;
-      }
+  // Create a search function for the comparison tool
+  const handleRepoSearch = async (query: string) => {
+    return new Promise<any[]>((resolve) => {
+      // Simulate API call with existing search logic
+      setTimeout(async () => {
+        try {
+          const searchParams = {
+            q: `${query} stars:>10`,
+            sort: "stars",
+            order: "desc",
+            per_page: 10,
+          };
+          const params = new URLSearchParams(searchParams as any);
+          const response = await fetch(`https://api.github.com/search/repositories?${params}`);
+          const data = await response.json();
+          resolve(data.items || []);
+        } catch (error) {
+          console.error("Search error:", error);
+          resolve([]);
+        }
+      }, 500);
     });
-
-    setFilteredRepos(filtered);
   };
 
-  const toggleBookmark = (repo: Repository) => {
-    const isBookmarked = bookmarkedRepos.some(r => r.id === repo.id);
-    let newBookmarked;
-    
-    if (isBookmarked) {
-      newBookmarked = bookmarkedRepos.filter(r => r.id !== repo.id);
-      toast({
-        title: "Removed from bookmarks",
-        description: `${repo.name} has been removed from your bookmarks.`,
-      });
-    } else {
-      newBookmarked = [...bookmarkedRepos, repo];
-      toast({
-        title: "Added to bookmarks",
-        description: `${repo.name} has been added to your bookmarks.`,
-      });
-    }
-    
-    setBookmarkedRepos(newBookmarked);
-    localStorage.setItem('githubBookmarks', JSON.stringify(newBookmarked));
-  };
-
-  const loadBookmarkedRepos = () => {
-    const saved = localStorage.getItem('githubBookmarks');
-    if (saved) {
-      setBookmarkedRepos(JSON.parse(saved));
-    }
-  };
-
-  const getUniqueLanguages = () => {
-    const languages = repositories
-      .map(repo => repo.language)
-      .filter(Boolean)
-      .filter((value, index, self) => self.indexOf(value) === index);
-    return languages.sort();
+  const getLanguageColor = (language: string) => {
+    const colors: Record<string, string> = {
+      JavaScript: "bg-yellow-500",
+      TypeScript: "bg-blue-500",
+      Python: "bg-green-500",
+      Java: "bg-red-500",
+      "C++": "bg-purple-500",
+      Go: "bg-cyan-500",
+      Rust: "bg-orange-500",
+      PHP: "bg-indigo-500",
+    };
+    return colors[language] || "bg-gray-500";
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-4">
-            GitHub Explorer
-          </h1>
-          <p className="text-xl text-slate-300 max-w-2xl mx-auto">
-            Discover trending open source projects, analyze statistics, and build your collection of amazing repositories.
-          </p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8"
+        >
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">
+              GitHub Explorer
+            </h1>
+            <p className="text-slate-400">
+              Discover, bookmark, and analyze open source projects
+            </p>
+          </div>
+          <div className="flex items-center gap-4 mt-4 md:mt-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className="border-slate-600 hover:border-slate-500"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+            </Button>
+          </div>
+        </motion.div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
-            <TabsTrigger value="explore" className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Explore
-            </TabsTrigger>
-            <TabsTrigger value="stats" className="flex items-center gap-2">
-              <Activity className="w-4 h-4" />
-              Stats
-            </TabsTrigger>
-            <TabsTrigger value="bookmarks" className="flex items-center gap-2">
-              <Bookmark className="w-4 h-4" />
-              Bookmarks ({bookmarkedRepos.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="explore" className="space-y-6">
-            <FilterPanel
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              sortBy={sortBy}
-              setSortBy={setSortBy}
-              languageFilter={languageFilter}
-              setLanguageFilter={setLanguageFilter}
-              languages={getUniqueLanguages()}
-              onRefresh={fetchTrendingRepos}
-              loading={loading}
-            />
-
-            {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, i) => (
-                  <Card key={i} className="bg-slate-800/50 border-slate-700 animate-pulse">
-                    <CardHeader>
-                      <div className="h-6 bg-slate-700 rounded mb-2"></div>
-                      <div className="h-4 bg-slate-700 rounded w-3/4"></div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-16 bg-slate-700 rounded mb-4"></div>
-                      <div className="flex gap-2">
-                        <div className="h-6 bg-slate-700 rounded w-16"></div>
-                        <div className="h-6 bg-slate-700 rounded w-16"></div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredRepos.map((repo) => (
-                  <RepositoryCard
-                    key={repo.id}
-                    repository={repo}
-                    isBookmarked={bookmarkedRepos.some(r => r.id === repo.id)}
-                    onToggleBookmark={() => toggleBookmark(repo)}
+        {/* Search Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+        >
+          <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm mb-8">
+            <CardContent className="p-6">
+              <form onSubmit={handleSearch} className="flex gap-4">
+                <div className="flex-1">
+                  <Input
+                    type="text"
+                    placeholder="Search repositories..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-400"
                   />
-                ))}
-              </div>
-            )}
+                </div>
+                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+                  <Search className="h-4 w-4 mr-2" />
+                  Search
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-            {!loading && filteredRepos.length === 0 && (
-              <div className="text-center py-12">
-                <Search className="w-16 h-16 mx-auto text-slate-400 mb-4" />
-                <h3 className="text-xl font-semibold text-slate-300 mb-2">No repositories found</h3>
-                <p className="text-slate-400">Try adjusting your search criteria or filters.</p>
-              </div>
-            )}
-          </TabsContent>
+        {/* Filters Panel */}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <SearchFilters
+                selectedLanguage={selectedLanguage}
+                setSelectedLanguage={setSelectedLanguage}
+                sortBy={sortBy}
+                setSortBy={setSortBy}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-          <TabsContent value="stats">
-            <StatsChart repositories={repositories} />
-          </TabsContent>
+        {/* Main Content */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+        >
+          <Tabs defaultValue="explore" className="space-y-6">
+            <TabsList className=" bg-white border-slate-700">
+              <TabsTrigger value="explore" className="data-[state=active]:bg-slate-200">
+                Explore
+              </TabsTrigger>
+              <TabsTrigger value="bookmarks" className="data-[state=active]:bg-slate-200">
+                Bookmarks ({bookmarks.length})
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className="data-[state=active]:bg-slate-200">
+                Analytics
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="bookmarks">
-            <BookmarkedRepos
-              bookmarkedRepos={bookmarkedRepos}
-              onToggleBookmark={toggleBookmark}
-            />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="explore" className="space-y-6">
+              {/* Trending Section */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <h2 className="text-2xl font-semibold text-white mb-4 flex items-center">
+                  <TrendingUp className="h-6 w-6 mr-2 text-orange-500" />
+                  Trending Today
+                </h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+                  {trending.slice(0, 3).map((repo, index) => (
+                    <motion.div
+                      key={repo.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.5 + index * 0.1 }}
+                    >
+                      <RepoCard
+                        repo={repo}
+                        isBookmarked={isBookmarked(repo.id)}
+                        onBookmark={() =>
+                          isBookmarked(repo.id)
+                            ? removeBookmark(repo.id)
+                            : addBookmark(repo)
+                        }
+                        getLanguageColor={getLanguageColor}
+                      />
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+
+              {/* Search Results */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+              >
+                <h2 className="text-2xl font-semibold text-white mb-4">
+                  Search Results
+                </h2>
+                {loading ? (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {[...Array(6)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: i * 0.1 }}
+                      >
+                        <Card className="bg-slate-800/50 border-slate-700">
+                          <CardContent className="p-6">
+                            <div className="animate-pulse space-y-4">
+                              <div className="h-4 bg-slate-700 rounded w-3/4"></div>
+                              <div className="h-3 bg-slate-700 rounded w-full"></div>
+                              <div className="h-3 bg-slate-700 rounded w-2/3"></div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {repositories.map((repo, index) => (
+                      <motion.div
+                        key={repo.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                      >
+                        <RepoCard
+                          repo={repo}
+                          isBookmarked={isBookmarked(repo.id)}
+                          onBookmark={() =>
+                            isBookmarked(repo.id)
+                              ? removeBookmark(repo.id)
+                              : addBookmark(repo)
+                          }
+                          getLanguageColor={getLanguageColor}
+                        />
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            </TabsContent>
+
+            <TabsContent value="bookmarks">
+              <BookmarksPanel
+                bookmarks={bookmarks}
+                onRemoveBookmark={removeBookmark}
+                getLanguageColor={getLanguageColor}
+              />
+            </TabsContent>
+
+            <TabsContent value="analytics">
+              <AnalyticsChart 
+                repositories={repositories} 
+                bookmarks={bookmarks} 
+                onSearchRepo={handleRepoSearch}
+              />
+            </TabsContent>
+          </Tabs>
+        </motion.div>
       </div>
     </div>
   );
