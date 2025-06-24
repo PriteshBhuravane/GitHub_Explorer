@@ -4,13 +4,13 @@ import path from "path"
 
 export default defineConfig({
   server: {
-    host: "0.0.0.0", // ✅ Required by Render
-    port: parseInt(process.env.PORT || "") || 5173, // ✅ Use Render's assigned port
+    host: "0.0.0.0",
+    port: parseInt(process.env.PORT || "") || 5173,
   },
   preview: {
     host: "0.0.0.0",
     port: parseInt(process.env.PORT || "") || 5173,
-    allowedHosts: ["github-explorer-xxxxx.onrender.com"], // ✅ Replace with actual Render domain
+    allowedHosts: ["github-explorer-yteb.onrender.com"], // ✅ Added your actual Render domain
   },
   plugins: [
     react(),
